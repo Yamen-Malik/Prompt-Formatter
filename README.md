@@ -5,7 +5,7 @@ This command line tool helps you change the appearance of your command line prom
 ## Usage
 
 ```bash
-prompt-formatter <command> [options]
+. prompt-formatter <command> [options]
 ```
 
 ### Commands
@@ -14,7 +14,7 @@ prompt-formatter <command> [options]
 - `store`: Store the current format.
 - `set-default [<index>]`: Set the the preferred default format to the current or the specified format.
 - `load <index>`: Set the prompt to the saved format at the given index.
-- `reset`: Set the prompt to the default format.
+- `reset`: Set the prompt to a standard format.
 - `default`: Set the prompt to the preferred default format.
 - `random`: Set the prompt to a random format.
 - `view <index>`: Print the stored format at the given index.
@@ -64,7 +64,7 @@ To use color options, simply include them in your format string using a `-` foll
 #### Example:
 
 ```bash
-prompt-formatter set -blue '$' -green '>' -reset
+. prompt-formatter set -blue '$' -green '>' -reset
 ```
 
 ### Other Options
@@ -85,7 +85,7 @@ To use these options, include them in your format string using a `-` followed by
 #### Example
 
 ```bash
-prompt-formatter set -green -u @ -h / -W : -s -orange
+. prompt-formatter set -green -u @ -h / -W : -s -orange
 ```
 
 Experiment with different color and option combinations to create a custom prompt format that suits your preferences.
@@ -106,6 +106,8 @@ To make it even easier to use the "prompt-formatter" tool, you can add an alias 
    ```bash
    alias custom-prompt='. path/to/prompt-formatter'
    ```
+
+   Replace `path/to/prompt-formatter` with the actual path to the "prompt-formatter" script on your system.
 
 3. To apply the changes immediately, either run the following command or restart your terminal:
    ```bash
