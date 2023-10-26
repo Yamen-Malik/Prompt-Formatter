@@ -1,0 +1,240 @@
+#!/bin/bash
+# region Colors dictionary and functions
+# Color codes
+declare -A colors=( ["black"]="30"       ["red"]="31"           ["green"]="32" 
+                    ["orange"]="33"      ["blue"]="34"          ["purple"]="35" 
+                    ["cyan"]="36"        ["lightGray"]="37"     ["darkGray"]="1;30" 
+                    ["lightRed"]="1;31"  ["lightGreen"]="1;32"  ["yellow"]="1;33" 
+                    ["lightBlue"]="1;34" ["lightPurple"]="1;35" ["lightCyan"]="1;36" 
+                    ["white"]="1;37"      ["reset"]="0")
+
+getColor () {
+    # Returns the given color code with the needed escape characters
+    echo "\033[${colors[$1]}m"
+}
+getPromptColor () {
+    # Returns the given color code with the needed escape characters to use for the prompt
+    # "\[ \] are added to tell the terminal that the color characters are 0 length characters"
+    # This is needed to help the terminal to calculate the length of the prompt text
+    # If removed some characters will get stuck to the prompt (visually)
+    echo "\[$(getColor $1)\]"
+}
+# endregion
+
+# region Formats loading and storing
+formatsFile=~/.config/prompt-formatter/formats
+
+# declare the formatList with a list of default formats
+declare -a defaultFormats=( "\[\e]0;\u@\h: \w\a\]\[\033[;32m\]┌──${debian_chroot:+($debian_chroot)──}${VIRTUAL_ENV:+(\[\033[0;1m\]$(basename $VIRTUAL_ENV)\[\033[;32m\])}(\[\033[1;34m\]\u㉿\h\[\033[;32m\])-[\[\033[0;1m\]\w\[\033[;32m\]]\n\[\033[;32m\]└─\[\033[1;34m\]\$ \[\033[0m\] "
+                        "$(getPromptColor lightBlue)> $(getPromptColor orange)"
+                        "$(getPromptColor lightGreen)\u@\h: $(getPromptColor orange)"
+                        "$(getPromptColor lightGreen)\u@\h:$(getPromptColor cyan)\W: \[")
+declare -a formatList=()
+
+# The default bash PS1 value
+default="$(getPromptColor lightGreen)\u@\h$(getPromptColor reset):$(getPromptColor lightBlue)\w$(getPromptColor reset)\$"
+
+# Load saved formats from the formatsFile
+if [ ! -f $formatsFile ]; then
+    mkdir -p ${formatsFile%/*}
+    for ((i=0; i < ${#defaultFormats[@]}; i++ )); do
+        echo ${defaultFormats[$i]} >> $formatsFile
+    done
+fi
+while IFS= read -r;do
+    formatList+=("$REPLY")
+done < "$formatsFile"
+
+addFormat () {
+    # Add the given format to the formatsFile
+    if printf '%s\n' "${formatList[@]}" | grep -Fxq "$1"; then
+        echo -e "$(getColor yellow)Format already exists"
+        return
+    elif [ ! -f $formatsFile ]; then
+        mkdir ${formatsFile%/*}
+    fi
+
+    printf '%s\n' "$1" >> $formatsFile
+    echo "The current format has been added to the list at index: ${#formatList[@]}"
+
+    formatList+=("$1")
+}
+
+getFormat () {
+    # Returns the format at the given index
+    # if index is out of range returns 1
+    if [[ $1 -ge 0 && $1 -lt ${#formatList[@]} && $1 == ?(-)+([0-9]) ]]; then
+        echo ${formatList[$1]}
+        return 0
+    else
+        indexOutOfRange $1
+        return 1
+    fi
+}
+
+deleteFormat () {
+    if [[ $1 -ge 0 && $1 -lt ${#formatList[@]} && $1 == ?(-)+([0-9]) ]]; then
+        sed -i "$(($1+1))d" $formatsFile
+    else
+        indexOutOfRange $1
+    fi
+}
+
+# endregion
+
+setCustom () {
+    # Set a custom format using the given arguments
+    format="$(getPromptColor reset)"
+    for arg in ${@:2}; do
+        if [[ ${arg:0:1} == '-' ]];then
+            if [[ ${colors[${arg:1}]} != '' ]];then
+                format+=$(getPromptColor ${arg:1})
+            elif [[ $arg == '-s' ]]; then
+                format+=' '
+            else
+                format+="\\"${arg:1:1}
+            fi
+        else
+            format+=$arg
+        fi
+    done
+    export PS1=$format
+}
+
+viewFormat () {
+    f=$(getFormat $1)
+    if [[ $? != 0 ]];then
+        return
+    fi
+    f=${f//"\u"/$USER}
+    f=${f//"\h"/$HOSTNAME}
+    f=${f//"\w"/$PWD}
+    f=${f//"\W"/${PWD##*/}}
+    f=${f//"\["/""}
+    f=${f//"\]"/""}
+    f=${f//"\n"/"\n   "}
+    echo -e "$(getColor reset)$1: ${f}echo \"Hello World\""
+}
+
+listFormats () {
+    for ((i=0; i < ${#formatList[@]}; i++)); do
+        viewFormat $i
+    done
+}
+
+indexOutOfRange () {
+    # Prints the error message for index out of range exception
+    # Pass the index to use in the error message
+    echo -e "$(getColor red)$1 is out of range" >&2
+    if [[ ${#formatList[@]} == 0 ]]; then
+        echo -e "$(getColor yellow)List is empty" >&2
+    else
+        echo -e "$(getColor yellow)List range [0, $((${#formatList[@]}-1))]" >&2
+    fi
+    echo -e "$(getColor reset)Use $(getColor blue)store$(getColor reset) to add the current format to the list" >&2
+}
+
+help () {
+    echo -e "+-----------------=|$(getColor green)Prompt Formatter$(getColor reset)|=-----------------+"
+    echo    "|This command line tool helps to easily customize the  |"
+    echo    "|look of the bash terminal prompt and store your       |"
+    echo    "|favorite formats to use them at any time              |"
+    echo -e "+------------------------------------------------------+"
+    echo -e '\n'
+
+    echo -e "$(getColor blue)Commands: $(getColor reset)"
+    echo -e "    $(getColor orange)set$(getColor reset): set the prompt to the given format
+    $(getColor orange)store <format>$(getColor reset): store the current format
+    $(getColor orange)set-default [<index>]$(getColor reset): set the the preferred default format to the current or the specified format
+    $(getColor orange)load <index>$(getColor reset): set the prompt to the saved format at the given index
+    $(getColor orange)reset$(getColor reset): set the prompt to a standard format
+    $(getColor orange)default$(getColor reset): set the prompt to the preferred default format
+    $(getColor orange)random$(getColor reset): set the prompt to a random format
+    $(getColor orange)view <index>$(getColor reset): print the stored format at the given index
+    $(getColor orange)ls (or list)$(getColor reset): list all of the stored formats
+    $(getColor orange)del (or delete) <index>$(getColor reset): delete the stored format at the given index
+    $(getColor orange)help (-h or --help)$(getColor reset): display this help message
+    "
+}
+
+unknownCommand () {
+    echo -e "$(getColor red)Unknown command $(getColor green)$1 $(getColor reset)"
+    echo -e "Use $(getColor blue)help $(getColor reset)or $(getColor blue)-h$(getColor reset) for more information"
+}
+
+printf $(getColor reset)
+
+if [[ $1 == "set" ]];then
+    setCustom "$@"
+
+elif [[ $1 == "load" ]]; then
+    f=$(getFormat $2)
+    if [[ $? == 0 ]];then
+        export PS1=$f
+    fi
+
+elif [[ $1 == "default" ]]; then
+    f=$(getFormat 0)
+    if [[ $? == 0 ]];then
+        export PS1=$f
+    fi
+
+elif [[ $1 == "set-default" ]]; then
+    index=$2
+    if [[ -z "${index}" ]];then
+        # find index of current format if it exists, otherwise add the format
+        for i in "${!formatList[@]}"; do
+            if [[ "${formatList[$i]}" = "${PS1}" ]]; then
+                index=$i
+                break
+            fi
+        done
+        if [[ -z "${index}" ]];then
+            addFormat "$PS1"
+            index=$((${#formatList[@]} - 1))
+        fi
+    fi
+    # swap selected format with the format at index 0
+    f=$(getFormat $index)
+    if [[ $? == 0 ]];then
+        formatList[$index]="${formatList[0]}"
+        formatList[0]="${f}"
+
+        formatList[0]=$(echo "${formatList[0]}" | sed 's/\\/\\\\/g')
+        formatList[$index]=$(echo "${formatList[$index]}" | sed 's/\\/\\\\/g')
+
+        sed -i "1c\\${formatList[0]}" $formatsFile
+        sed -i "$((index+1))c\\${formatList[$index]}" $formatsFile
+
+        echo "Moved format to index 0, to set as default"
+    fi
+
+elif [[ $1 == "random" ]]; then
+    i=$(( $RANDOM % ${#formatList[@]} ))
+    f=$(getFormat $i)
+    if [[ $? == 0 ]];then
+        export PS1=$f
+    fi
+
+elif [[ $1 == "view" ]]; then
+    viewFormat $2
+
+elif [[ $1 == "ls" || $1 == "list" ]]; then
+    listFormats
+
+elif [[ $1 == "store" ]]; then
+    addFormat "$PS1"
+
+elif [[ $1 == "delete" || $1 == "del" ]]; then
+    deleteFormat $2
+    echo "Deleted format at index $2"
+
+elif [[ $1 == "reset" ]]; then
+    export PS1=$default
+
+elif [[ $1 == "--help" || $1 == "-h" || $1 == "help" ]]; then
+    help
+
+else
+    unknownCommand $1
+fi
